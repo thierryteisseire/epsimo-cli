@@ -1,0 +1,509 @@
+/* Modern Tool Calling Styles - ChatGPT-like */
+
+/* Tool Usage Container */
+.toolUsageContainer {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 8px 0;
+    animation: fadeSlideIn 0.3s ease-out;
+}
+
+.toolUsageHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.toolUsageHeader svg {
+    color: var(--color-primary);
+}
+
+.toolCardList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Tool Card */
+.toolCard {
+    background: var(--background-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    animation: cardSlideIn 0.25s ease-out;
+}
+
+.toolCard:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Status-based styling */
+.status_running {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, transparent 100%);
+}
+
+.status_success {
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.status_error {
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Tool Header */
+.toolHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+.toolHeader:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.toolHeaderLeft {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.toolHeaderRight {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Status Indicator */
+.statusIndicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.indicator_pending {
+    background: rgba(156, 163, 175, 0.15);
+}
+
+.indicator_running {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.indicator_success {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.indicator_error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* Pulsing Dot Animation */
+.pulsingDot {
+    width: 8px;
+    height: 8px;
+    background: #3b82f6;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.pendingDot {
+    width: 6px;
+    height: 6px;
+    background: #9ca3af;
+    border-radius: 50%;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.3);
+        opacity: 0.7;
+    }
+}
+
+/* Tool Icon & Name */
+.toolIcon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.toolName {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Args Summary */
+.argsSummary {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Chevron */
+.chevron {
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.chevronExpanded {
+    transform: rotate(180deg);
+}
+
+.miniChevron {
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+/* Tool Body */
+.toolBody {
+    padding: 0 14px 14px;
+    animation: expandIn 0.2s ease-out;
+}
+
+/* Tool Section */
+.toolSection {
+    margin-top: 10px;
+}
+
+.sectionHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.sectionTitle {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sectionContent {
+    margin-top: 6px;
+    background: var(--background-base);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow: hidden;
+}
+
+/* JSON Viewer */
+.jsonViewer {
+    position: relative;
+}
+
+.jsonContent {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    max-height: none;
+    overflow: visible;
+}
+
+.jsonContent.collapsed {
+    max-height: 100px;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
+.expandButton {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border-color);
+    color: var(--color-primary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.expandButton:hover {
+    background: rgba(99, 102, 241, 0.05);
+}
+
+/* Running Status */
+.runningStatus {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(59, 130, 246, 0.05);
+    border-radius: 8px;
+}
+
+.runningText {
+    display: block;
+    font-size: 12px;
+    color: #3b82f6;
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+/* Progress Bar */
+.progressBar {
+    height: 3px;
+    background: rgba(59, 130, 246, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progressFill {
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    border-radius: 2px;
+    animation: progressSlide 1.5s ease-in-out infinite;
+}
+
+@keyframes progressSlide {
+    0% {
+        transform: translateX(-100%);
+        width: 30%;
+    }
+
+    50% {
+        width: 60%;
+    }
+
+    100% {
+        transform: translateX(400%);
+        width: 30%;
+    }
+}
+
+/* Executing Card (Standalone) */
+.executingCard {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    animation: fadeSlideIn 0.3s ease-out;
+}
+
+.executingHeader {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.executingName {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.executingProgress {
+    margin-top: 8px;
+}
+
+/* Legacy Response (for backward compatibility) */
+.legacyResponse {
+    background: rgba(34, 197, 94, 0.05);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+}
+
+.responseHeader {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #22c55e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.responseContent {
+    background: var(--background-base);
+    border-radius: 6px;
+    padding: 10px;
+    overflow-x: auto;
+}
+
+.responseContent pre {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+}
+
+/* Animations */
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes cardSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes expandIn {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+
+    to {
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .toolCard {
+        background: rgba(30, 30, 35, 0.8);
+    }
+
+    .toolHeader:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .sectionContent {
+        background: rgba(0, 0, 0, 0.2);
+    }
+}
+
+/* Legacy styles for backward compatibility */
+.toolContainer {
+    background-color: var(--background-surface-hover);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+    border: 1px solid var(--border-color);
+}
+
+.header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-3);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.requestBlock {
+    margin-bottom: var(--spacing-3);
+}
+
+.argsBox {
+    margin-top: var(--spacing-2);
+    background-color: var(--background-base);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-3);
+    overflow-x: auto;
+}
+
+.codeBlock {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+}
+
+.responseBlock {
+    margin-left: var(--spacing-4);
+    border-left: 2px solid var(--border-color);
+    padding-left: var(--spacing-3);
+    margin-top: var(--spacing-2);
+}
+
+.executing {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    font-style: italic;
+    margin-left: var(--spacing-4);
+    margin-top: var(--spacing-2);
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

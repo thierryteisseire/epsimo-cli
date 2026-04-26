@@ -1,0 +1,36 @@
+{
+    "name": "epsimo-cli",
+    "version": "0.2.2",
+    "description": "Epsimo CLI - Manage AI agents, projects, threads, Virtual Database, and deployments from the terminal.",
+    "main": "SKILL.md",
+    "bin": {
+        "epsimo": "./bin/epsimo.js"
+    },
+    "scripts": {
+        "test": "python3 -m epsimo --help"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/thierryteisseire/epsimo-cli.git"
+    },
+    "keywords": [
+        "epsimo",
+        "cli",
+        "ai-agent",
+        "ai-framework",
+        "virtual-database",
+        "threads",
+        "assistants",
+        "conversation-ai"
+    ],
+    "author": "Thierry Teisseire",
+    "license": "MIT",
+    "files": [
+        "SKILL.md",
+        "README.md",
+        "LICENSE",
+        "bin/",
+        "epsimo/",
+        "requirements.txt"
+    ]
+}

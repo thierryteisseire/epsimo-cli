@@ -1,0 +1,12 @@
+# Epsimo Agent Configuration
+name: "{{PROJECT_NAME}}"
+
+assistants:
+  - name: "mvp-assistant"
+    model: "gpt-4o"
+    instructions: |
+      You are the core intelligence for {{PROJECT_NAME}}. 
+      You help users achieve their goals by using the tools available to you.
+    tools:
+      - type: "retrieval"
+      - type: "ddg_search"

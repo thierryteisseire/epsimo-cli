@@ -1,0 +1,51 @@
+# Epsimo Tool Library
+# Reusable tool schemas for rapid development
+
+database_sync:
+  type: "function"
+  name: "update_database"
+  description: "Persist structured JSON data to the conversation state for long-term memory."
+  parameters:
+    type: "object"
+    properties:
+      key:
+        type: "string"
+        description: "The data category (e.g. 'user_info', 'preferences')"
+      value:
+        type: "object"
+        description: "The JSON data to store"
+    required: ["key", "value"]
+
+web_search_tavily:
+  type: "search_tavily"
+  name: "Search"
+  description: "Advanced search with source attribution."
+  config:
+    max_results: 5
+
+web_search_ddg:
+  type: "ddg_search"
+  name: "Quick Search"
+  description: "Fast web search for simple queries."
+
+retrieval_optimized:
+  type: "retrieval"
+  name: "Knowledge Base"
+  description: "Search in uploaded documents."
+  config:
+    top_k: 5
+    score_threshold: 0.7
+
+task_management:
+  type: "function"
+  name: "manage_task"
+  description: "Track and update user tasks."
+  parameters:
+    type: "object"
+    properties:
+      action:
+        type: "string"
+        enum: ["create", "update", "delete", "list"]
+      details:
+        type: "object"
+    required: ["action", "details"]

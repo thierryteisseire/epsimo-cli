@@ -1,0 +1,43 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { ThreadChat } from "@/components/epsimo";
+import styles from "./page.module.css";
+
+export default function Home() {
+  const [appState, setAppState] = useState<any>(null);
+
+  // Example: Listening for changes in the Virtual Database
+  // In a real app, you would fetch this on a timer or after a message
+  useEffect(() => {
+    console.log("Tip: Use client.db.get_all() from the SDK to read structured thread state!");
+  }, []);
+
+  return (
+    <main className={styles.main}>
+      <header className={styles.header}>
+        <div className={styles.titleGroup}>
+          <h1>{{PROJECT_NAME}}</h1>
+          <span className={styles.version}>v0.1.0</span>
+        </div>
+        <p>AI-Powered MVP built with Epsimo Agent Framework</p>
+      </header>
+
+      <div className={styles.content}>
+        <aside className={styles.sidebar}>
+          <h3>Project Memory</h3>
+          <p className={styles.hint}>Structured data written by the agent will appear here.</p>
+          <div className={styles.dbPreview}>
+            {appState ? JSON.stringify(appState, null, 2) : "DB Empty..."}
+          </div>
+        </aside>
+
+        <section className={styles.chatSection}>
+          <ThreadChat 
+            assistantId="{{ASSISTANT_ID}}"
+          />
+        </section>
+      </div>
+    </main>
+  );
+}

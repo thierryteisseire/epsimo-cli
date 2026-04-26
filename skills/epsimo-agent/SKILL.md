@@ -6,7 +6,7 @@ description: Comprehensive Epsimo AI platform SDK and CLI for managing agents, p
 # Epsimo Agent Framework
 
 > [!NOTE]
-> This is a **Beta Release** (v0.2.1). Features and APIs may evolve based on feedback.
+> This is a **Beta Release** (v0.2.0). Features and APIs may evolve based on feedback.
 
 The Epsimo Agent Framework allows you to build sophisticated AI-powered applications with agents, persistent threads, and a "Virtual Database" state layer. It provides a unified **CLI**, a **Python SDK**, and a **React UI Kit**.
 
@@ -21,7 +21,7 @@ The fastest way to build an Epsimo app is using the project generator:
 
 ```bash
 # 1. Authenticate
-epsimo auth
+epsimo auth login
 
 # 2. Create a new Next.js project
 epsimo create "My AI App"
@@ -49,7 +49,7 @@ chmod +x epsimo/cli.py
 export PATH="$PATH:$(pwd)/epsimo"
 
 # Or via npm (for Claude Code skills)
-npm install -g epsimo-cli
+npm install -g epsimo-agent
 ```
 
 **Dependencies:**
@@ -71,7 +71,7 @@ epsimo auth login
 # Login with environment variables
 export EPSIMO_EMAIL=your@email.com
 export EPSIMO_PASSWORD=your-password
-epsimo auth
+epsimo auth login
 ```
 
 ### Programmatic Authentication
@@ -116,7 +116,7 @@ The `epsimo` CLI is the main tool for managing your agents and data.
 
 | Command | Description |
 |---------|-------------|
-| `epsimo auth` | Interactive login with email/password |
+| `epsimo auth login` | Interactive login with email/password |
 | `epsimo whoami` | Display current user info and thread usage |
 
 **Example:**

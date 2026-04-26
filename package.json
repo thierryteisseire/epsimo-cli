@@ -1,13 +1,15 @@
 {
     "name": "epsimo-cli",
-    "version": "0.2.2",
-    "description": "Epsimo CLI - Manage AI agents, projects, threads, Virtual Database, and deployments from the terminal.",
+    "version": "0.3.0",
+    "description": "Epsimo CLI - TUI dashboard, smart CLI, AI agents, projects, threads, Virtual Database, and deployments from the terminal.",
     "main": "SKILL.md",
     "bin": {
         "epsimo": "./bin/epsimo.js"
     },
     "scripts": {
-        "test": "python3 -m epsimo --help"
+        "verify": "python3 verify_skill.py",
+        "test": "python3 scripts/test_all_skills.py",
+        "auth": "python3 epsimo/auth.py"
     },
     "repository": {
         "type": "git",
@@ -16,12 +18,15 @@
     "keywords": [
         "epsimo",
         "cli",
+        "tui",
         "ai-agent",
         "ai-framework",
         "virtual-database",
         "threads",
         "assistants",
-        "conversation-ai"
+        "conversation-ai",
+        "agent-sdk",
+        "multi-agent"
     ],
     "author": "Thierry Teisseire",
     "license": "MIT",
@@ -30,7 +35,17 @@
         "README.md",
         "LICENSE",
         "bin/",
+        "verify_skill.py",
+        "test_sdk.py",
+        "assets/",
+        "references/",
+        "scripts/",
         "epsimo/",
-        "requirements.txt"
+        "docs/",
+        "requirements.txt",
+        "skills/",
+        "install.sh",
+        "install.ps1",
+        "pyproject.toml"
     ]
 }

@@ -7,7 +7,11 @@ class Threads:
     def list(self, project_id):
         """List threads in a project."""
         headers = self.client.get_project_headers(project_id)
-        return self.client.request("GET", "/threads/", headers=headers)
+        data = self.client.request("GET", "/threads/", headers=headers)
+        # API returns {"threads": [...], "total": N} — extract the list
+        if isinstance(data, dict) and "threads" in data:
+            return data["threads"]
+        return data if isinstance(data, list) else []
 
     def create(self, project_id, name, assistant_id, metadata=None):
         """Create a new thread."""
@@ -67,7 +71,7 @@ class Threads:
             "thread_id": thread_id,
             "assistant_id": assistant_id,
             "input": [{"role": "user", "content": message, "type": "human"}],
-            "stream_mode": stream_mode or ["messages", "values"]
+            "stream_mode": stream_mode or ["messages", "events", "values"]
         }
         
         # Bypass client.request to handle streaming
@@ -75,14 +79,21 @@ class Threads:
         response = self.client._session.post(url, json=payload, headers=headers, stream=True)
         response.raise_for_status()
 
+        current_event = None
         for line in response.iter_lines():
             if line:
                 decoded = line.decode('utf-8')
-                if decoded.startswith("data:"):
+                if decoded.startswith("event:"):
+                    current_event = decoded[6:].strip()
+                elif decoded.startswith("data:"):
                     data_str = decoded[5:].strip()
                     if data_str == "[DONE]":
                         break
                     try:
-                        yield json.loads(data_str)
+                        parsed = json.loads(data_str)
+                        if current_event and isinstance(parsed, dict):
+                            parsed["_event"] = current_event
+                        yield parsed
                     except json.JSONDecodeError:
                         yield {"raw": data_str, "error": "json_decode_error"}
+                    current_event = None

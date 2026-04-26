@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 # Configuration
-API_BASE_URL = os.environ.get("EPSIMO_API_URL", "https://api.epsimoagents.com")
+API_BASE_URL = os.environ.get("EPSIMO_API_URL", "http://localhost:8000")
 TOKEN_FILE = Path.home() / ".epsimo_token"
 
 def get_token():

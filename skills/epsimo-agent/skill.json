@@ -1,0 +1,107 @@
+{
+  "$schema": "https://claude.ai/schemas/skill-manifest-v1.json",
+  "name": "epsimo-agent",
+  "displayName": "Epsimo Agent Framework",
+  "version": "0.2.0",
+  "description": "Build production-ready AI applications with multi-agent orchestration, persistent state, streaming conversations, and React UI Kit. Perfect for chatbot backends, multi-agent systems, and AI app MVPs.",
+  "longDescription": "Comprehensive Epsimo AI platform SDK and CLI for managing agents, projects, threads, Virtual Database, and frontend design. Build AI apps with persistent state, streaming conversations, and React UI kit. Includes full-stack scaffolding with Next.js, Python SDK, and CLI tools.",
+  "author": {
+    "name": "Thierry Teisseire",
+    "email": "thierry@epsimoai.com",
+    "url": "https://github.com/thierryteisseire"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thierryteisseire/epsimo-agent.git"
+  },
+  "homepage": "https://github.com/thierryteisseire/epsimo-agent",
+  "bugs": "https://github.com/thierryteisseire/epsimo-agent/issues",
+  "license": "MIT",
+  "keywords": [
+    "agent-skill",
+    "epsimo",
+    "ai-agent",
+    "ai-framework",
+    "multi-agent",
+    "virtual-database",
+    "conversation-ai",
+    "persistent-state",
+    "chatbot",
+    "react-ui",
+    "nextjs",
+    "python-sdk",
+    "cli-tool",
+    "agent-orchestration",
+    "llm-framework",
+    "ai-sdk",
+    "chatbot-framework",
+    "state-management",
+    "conversation-history"
+  ],
+  "categories": [
+    "ai-framework",
+    "multi-agent",
+    "conversation",
+    "developer-tools"
+  ],
+  "compatibility": {
+    "claude": ">=4.0.0"
+  },
+  "files": {
+    "skill": "SKILL.md"
+  },
+  "install": {
+    "type": "npm",
+    "package": "epsimo-agent"
+  },
+  "usage": {
+    "command": "/epsimo-agent",
+    "examples": [
+      {
+        "title": "Create AI app MVP",
+        "command": "Create a new AI chatbot application with persistent conversations"
+      },
+      {
+        "title": "Multi-agent orchestration",
+        "command": "Set up multiple AI agents that can communicate with each other"
+      },
+      {
+        "title": "Virtual Database queries",
+        "command": "Query conversation data using SQL-like syntax"
+      },
+      {
+        "title": "Deploy AI app",
+        "command": "Deploy my Epsimo app to production"
+      }
+    ]
+  },
+  "features": [
+    "Multi-agent orchestration with persistent state",
+    "Virtual Database for structured conversation data",
+    "Streaming conversations with thread history",
+    "React UI Kit for instant chatbot interfaces",
+    "Full-stack project scaffolding (Next.js + API)",
+    "Python SDK and CLI tools",
+    "One-command deployment",
+    "Agent-to-agent communication",
+    "Automatic state persistence",
+    "SQL-like data queries"
+  ],
+  "requirements": {
+    "tools": ["python", "node"],
+    "optional": [
+      "Epsimo API key (get free at https://app.epsimoagents.com)"
+    ]
+  },
+  "platforms": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "metadata": {
+    "apiUrl": "https://api.epsimoagents.com",
+    "frontendUrl": "https://app.epsimoagents.com",
+    "status": "beta",
+    "version": "0.2.0"
+  }
+}

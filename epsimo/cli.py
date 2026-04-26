@@ -6,6 +6,8 @@ import json
 import yaml
 from .client import EpsimoClient
 from .auth import login_interactive, get_token
+from .cli_smart import cmd_chat, cmd_exec, cmd_search, cmd_tools, cmd_tools_health
+from .tui import cmd_tui
 
 def cmd_whoami(args):
     """Show current user info."""
@@ -50,31 +52,17 @@ def cmd_balance(args):
 
 def cmd_buy(args):
     """Create a checkout session to buy credits."""
-    print(f"🛒 Preparing purchase of {args.quantity} threads...")
-    
-    quantity = args.quantity
-    total_amount = args.amount
-    
-    # Estimation logic if amount not provided
-    if total_amount is None:
-        if quantity >= 1000:
-            price_per_unit = 0.08
-        elif quantity >= 500:
-            price_per_unit = 0.09
-        else:
-            price_per_unit = 0.10
-        total_amount = round(quantity * price_per_unit, 2)
-        print(f"ℹ️  Estimated cost: {total_amount} EUR")
+    print(f"🛒 Preparing purchase of {args.quantity} credits...")
 
     try:
         token = get_token()
         client = EpsimoClient(api_key=token)
-        data = client.credits.create_checkout_session(quantity, total_amount)
+        data = client.credits.create_checkout_session(args.quantity)
         
         checkout_url = data.get("url")
         if checkout_url:
-            print("\n✅ Checkout session created successfully!")
-            print(f"Please visit this URL to complete your purchase:\n\n{checkout_url}\n")
+            print("\n✅ Checkout session created!")
+            print(f"Complete your purchase here:\n\n{checkout_url}\n")
         else:
             print("❌ No checkout URL returned from server.")
             
@@ -427,41 +415,74 @@ def cmd_create(args):
     except Exception as e:
         print(f"❌ Failed to create project: {e}")
 
+def _pick_item(items, label, name_key="name"):
+    """Prompt user to pick from a list. Auto-selects if only one."""
+    if not items:
+        return None
+    if len(items) == 1:
+        print(f"📌 Using {label}: {items[0].get(name_key, '?')}")
+        return items[0]
+    print(f"\n  Select a {label}:")
+    for i, item in enumerate(items, 1):
+        print(f"  {i}) {item.get(name_key, '?')}")
+    while True:
+        try:
+            choice = input(f"  Enter number [1-{len(items)}]: ").strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(items):
+                return items[idx]
+        except (ValueError, EOFError, KeyboardInterrupt):
+            print()
+            return None
+        print(f"  Invalid choice. Enter 1-{len(items)}.")
+
+
 def cmd_run(args):
     """Run an interactive chat with an assistant."""
-    print(f"▶️  Running Assistant: {args.assistant_id}")
-    
     # 1. Initialize Client
     try:
-        client = EpsimoClient() # Auto-loads token from file via get_token in auth logic if not passed, 
-                                # BUT client.py currently expects api_key env var or arg.
-                                # Let's update client to try get_token if nothing passed?
-                                # For now, explicit:
         token = get_token()
         client = EpsimoClient(api_key=token)
     except Exception as e:
         print(f"❌ Auth failed: {e}. Try 'epsimo auth'.")
         return
 
-    # 2. Verify Assistant Exists (and get project context implicitly?)
-    # We need a project_id to run things. 
-    # CLI args should probably include project_id or we find the assistant.
-    # Finding assistant across all projects is hard without a "search" endpoint.
-    
-    if not args.project_id:
-        print("❌ --project-id is currently required.")
-        return
+    # 2. Resolve project
+    project_id = getattr(args, "project_id", None)
+    if not project_id:
+        projects = client.projects.list()
+        if not projects:
+            print("❌ No projects found. Run 'epsimo init' to create one.")
+            return
+        picked = _pick_item(projects, "project")
+        if not picked:
+            return
+        project_id = picked["project_id"]
 
-    # 3. Create Thread
+    # 3. Resolve assistant
+    assistant_id = getattr(args, "assistant_id", None)
+    if not assistant_id:
+        assistants = client.assistants.list(project_id)
+        if not assistants:
+            print("❌ No assistants found in this project.")
+            return
+        picked = _pick_item(assistants, "assistant")
+        if not picked:
+            return
+        assistant_id = picked["assistant_id"]
+
+    print(f"▶️  Running Assistant: {assistant_id[:8]}…")
+
+    # 4. Create Thread
     print("🧵 Creating session thread...")
     try:
-        thread = client.threads.create(args.project_id, "CLI Session", args.assistant_id)
+        thread = client.threads.create(project_id, "CLI Session", assistant_id)
         thread_id = thread["thread_id"]
     except Exception as e:
         print(f"❌ Failed to create thread: {e}")
         return
 
-    # 4. Chat Loop
+    # 5. Chat Loop
     print(f"✅ Ready! (Thread: {thread_id})")
     print("Type 'exit' to quit.\n")
     
@@ -473,24 +494,72 @@ def cmd_run(args):
             
             print("Bot > ", end="", flush=True)
             stream = client.threads.run_stream(
-                project_id=args.project_id,
+                project_id=project_id,
                 thread_id=thread_id,
-                assistant_id=args.assistant_id,
+                assistant_id=assistant_id,
                 message=user_input
             )
             
             last_printed_len = 0
+            spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+            spin_idx = 0
+            active_tool = None
+            seen_tool_ids = set()
             for chunk in stream:
-                 # Handle both list and dict chunks as discovered in testing
-                content = None
-                if isinstance(chunk, list):
-                    for item in chunk:
-                        if isinstance(item, dict) and "content" in item:
-                            content = item["content"]
-                            break
-                elif isinstance(chunk, dict) and "content" in chunk:
-                    content = chunk["content"]
-                
+                if not isinstance(chunk, list) or len(chunk) != 1:
+                    continue
+                item = chunk[0]
+                if not isinstance(item, dict):
+                    continue
+                msg_type = item.get("type", "")
+                msg_id = item.get("id") or item.get("tool_call_id", "")
+
+                # Tool response — show result once
+                if msg_type == "tool":
+                    if msg_id and msg_id in seen_tool_ids:
+                        continue
+                    if msg_id:
+                        seen_tool_ids.add(msg_id)
+                    if active_tool:
+                        content = item.get("content", "")
+                        result = str(content)[:500] if content else ""
+                        sys.stdout.write(f"\r✅ {active_tool} done          \n")
+                        if result.strip():
+                            sys.stdout.write(f"   📎 {result.strip()}\n")
+                        sys.stdout.flush()
+                        active_tool = None
+                        last_printed_len = 0
+                    continue
+
+                if msg_type not in ("ai", "AIMessageChunk"):
+                    continue
+
+                # Detect tool calls (only before tool result)
+                tool_calls = item.get("tool_calls", [])
+                if tool_calls and not seen_tool_ids:
+                    for tc in tool_calls:
+                        name = tc.get("name", "")
+                        if name and name != active_tool:
+                            active_tool = name
+                    spin_idx = (spin_idx + 1) % len(spinner)
+                    sys.stdout.write(f"\r{spinner[spin_idx]} Calling {active_tool}...")
+                    sys.stdout.flush()
+                    continue
+                elif tool_calls and seen_tool_ids:
+                    # After tool result, skip replayed tool_call chunks with no content
+                    content = item.get("content")
+                    if not content:
+                        continue
+
+                content = item.get("content")
+                if content and isinstance(content, str):
+                    new_text = content[last_printed_len:]
+                    if new_text:
+                        sys.stdout.write(new_text)
+                        sys.stdout.flush()
+                        last_printed_len = len(content)
+
+                content = item.get("content")
                 if content and isinstance(content, str):
                     new_text = content[last_printed_len:]
                     if new_text:
@@ -506,84 +575,278 @@ def cmd_run(args):
             break
 
 def main():
-    parser = argparse.ArgumentParser(description="Epsimo Agent Framework CLI")
+    F = argparse.RawDescriptionHelpFormatter
+
+    parser = argparse.ArgumentParser(
+        description="Epsimo Agent Framework CLI — build and manage AI-powered applications",
+        formatter_class=F,
+        epilog="""quick start:
+  epsimo auth                  Log in to your account
+  epsimo create "My AI App"    Scaffold a new project
+  cd my-ai-app && epsimo init  Link directory to platform
+  epsimo deploy                Push config to Epsimo cloud
+
+docs: https://github.com/thierryteisseire/epsimo-agent"""
+    )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # epsimo init
-    init_parser = subparsers.add_parser("init", help="Initialize a new project")
-    init_parser.add_argument("--name", help="Project name (defaults to current directory)")
+    init_parser = subparsers.add_parser("init",
+        help="Link current directory to a new Epsimo project on the platform",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo init                  Use current directory name as project name
+  epsimo init --name "My Bot"  Use a custom project name
+
+Creates epsimo.yaml with project config and a default assistant.""")
+    init_parser.add_argument("--name", help="Project name (defaults to current directory name)")
     init_parser.set_defaults(func=cmd_init)
 
     # epsimo deploy
-    deploy_parser = subparsers.add_parser("deploy", help="Deploy config from epsimo.yaml")
+    deploy_parser = subparsers.add_parser("deploy",
+        help="Sync local epsimo.yaml configuration to the Epsimo platform",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo deploy                Push assistants and config to the cloud
+
+Reads epsimo.yaml from the current directory. Creates new assistants
+or updates existing ones that match by name.""")
     deploy_parser.set_defaults(func=cmd_deploy)
 
     # epsimo create
-    create_parser = subparsers.add_parser("create", help="Create a new Epsimo MVP project")
-    create_parser.add_argument("name", help="Name of the project")
+    create_parser = subparsers.add_parser("create",
+        help="Scaffold a new Next.js project with Epsimo UI Kit pre-configured",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo create "Customer Support Bot"
+  epsimo create "Research Assistant"
+
+Creates a ready-to-run Next.js app with chat UI, streaming, and
+Virtual Database integration. Follow up with: cd <project> && npm install""")
+    create_parser.add_argument("name", help="Display name for the new project (e.g. \"My AI App\")")
     create_parser.set_defaults(func=cmd_create)
 
     # epsimo auth
-    auth_parser = subparsers.add_parser("auth", help="Login to Epsimo")
-    auth_parser.add_argument("--force", action="store_true", help="Force re-authentication")
+    auth_parser = subparsers.add_parser("auth",
+        help="Authenticate with your Epsimo account (interactive email/password login)",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo auth                  Interactive login prompt
+  epsimo auth --force          Re-authenticate even if already logged in
+
+You can also set EPSIMO_EMAIL and EPSIMO_PASSWORD environment variables.""")
+    auth_parser.add_argument("--force", action="store_true",
+        help="Force re-authentication even if a valid token exists")
     auth_parser.set_defaults(func=cmd_auth)
 
     # epsimo whoami
-    whoami_parser = subparsers.add_parser("whoami", help="Show current user info")
+    whoami_parser = subparsers.add_parser("whoami",
+        help="Display your login email and current thread usage",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo whoami
+
+output:
+  Logged in as: user@example.com
+  Threads Used: 45/100""")
     whoami_parser.set_defaults(func=cmd_whoami)
 
     # epsimo projects
-    projects_parser = subparsers.add_parser("projects", help="List projects")
-    projects_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    projects_parser = subparsers.add_parser("projects",
+        help="List all projects in your account",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo projects              Show projects as a table
+  epsimo projects --json       Output as JSON (for scripting)""")
+    projects_parser.add_argument("--json", action="store_true",
+        help="Output project list as JSON instead of a table")
     projects_parser.set_defaults(func=cmd_projects)
 
     # epsimo credits {balance, buy}
-    credits_parser = subparsers.add_parser("credits", help="Manage credits and thread usage")
-    credits_subparsers = credits_parser.add_subparsers(dest="credits_command", help="Credits command")
-    
-    balance_parser = credits_subparsers.add_parser("balance", help="Check current credit balance")
+    credits_parser = subparsers.add_parser("credits",
+        help="Check thread balance or purchase additional threads",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo credits balance       Show threads used/remaining
+  epsimo credits buy --quantity 500""")
+    credits_subparsers = credits_parser.add_subparsers(dest="credits_command", help="Credits action")
+
+    balance_parser = credits_subparsers.add_parser("balance",
+        help="Show current thread usage, total allowance, and remaining threads")
     balance_parser.set_defaults(func=cmd_balance)
-    
-    buy_parser = credits_subparsers.add_parser("buy", help="Buy more credits")
-    buy_parser.add_argument("--quantity", type=int, required=True, help="Number of threads to purchase")
-    buy_parser.add_argument("--amount", type=float, help="Total amount to pay in EUR (optional, calculated if omitted)")
+
+    buy_parser = credits_subparsers.add_parser("buy",
+        help="Generate a Stripe checkout URL to purchase additional threads")
+    buy_parser.add_argument("--quantity", type=int, required=True,
+        help="Number of threads to purchase (e.g. 500, 1000)")
     buy_parser.set_defaults(func=cmd_buy)
 
     # epsimo assistants --project-id X
-    assistants_parser = subparsers.add_parser("assistants", help="List assistants")
-    assistants_parser.add_argument("--project-id", required=True, help="Project ID")
-    assistants_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    assistants_parser = subparsers.add_parser("assistants",
+        help="List all AI assistants in a project",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo assistants --project-id proj_abc123
+  epsimo assistants --project-id proj_abc123 --json""")
+    assistants_parser.add_argument("--project-id", required=True,
+        help="ID of the project to list assistants from (see 'epsimo projects')")
+    assistants_parser.add_argument("--json", action="store_true",
+        help="Output assistant list as JSON instead of a table")
     assistants_parser.set_defaults(func=cmd_assistants)
 
     # epsimo threads --project-id X
-    threads_parser = subparsers.add_parser("threads", help="List threads")
-    threads_parser.add_argument("--project-id", required=True, help="Project ID")
+    threads_parser = subparsers.add_parser("threads",
+        help="List all conversation threads in a project",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo threads --project-id proj_abc123""")
+    threads_parser.add_argument("--project-id", required=True,
+        help="ID of the project to list threads from (see 'epsimo projects')")
     threads_parser.set_defaults(func=cmd_threads)
 
     # epsimo run --project-id X --assistant-id Y
-    run_parser = subparsers.add_parser("run", help="Run a terminal chat session")
-    run_parser.add_argument("--project-id", required=True, help="Project ID")
-    run_parser.add_argument("--assistant-id", required=True, help="Assistant ID")
+    run_parser = subparsers.add_parser("run",
+        help="Start an interactive terminal chat session with an assistant",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo run                                     Auto-select project and assistant
+  epsimo run --project-id proj_abc123            Pick assistant interactively
+  epsimo run --project-id proj_abc --assistant-id asst_xyz
+
+Creates a new thread and opens a live chat. Type 'exit' to quit.""")
+    run_parser.add_argument("--project-id",
+        help="Project ID (omit to choose interactively)")
+    run_parser.add_argument("--assistant-id",
+        help="Assistant ID (omit to choose interactively)")
     run_parser.set_defaults(func=cmd_run)
 
     # epsimo db query --project-id X --thread-id Y
-    db_parser = subparsers.add_parser("db", help="Manage Virtual Database state")
-    db_subparsers = db_parser.add_subparsers(dest="db_command", help="DB command")
-    
-    query_parser = db_subparsers.add_parser("query", help="Query the current state of a thread")
-    query_parser.add_argument("--project-id", required=True, help="Project ID")
-    query_parser.add_argument("--thread-id", required=True, help="Thread ID")
+    db_parser = subparsers.add_parser("db",
+        help="Read and write structured data in the Virtual Database (thread state)",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo db query --project-id proj_abc --thread-id thread_123
+  epsimo db set --project-id proj_abc --thread-id thread_123 \\
+    --key "status" --value '"completed"'
+
+The Virtual Database stores persistent key-value data per thread.""")
+    db_subparsers = db_parser.add_subparsers(dest="db_command", help="Virtual Database action")
+
+    query_parser = db_subparsers.add_parser("query",
+        help="Display all stored key-value pairs for a thread")
+    query_parser.add_argument("--project-id", required=True,
+        help="ID of the project containing the thread")
+    query_parser.add_argument("--thread-id", required=True,
+        help="ID of the thread to query state from")
     query_parser.set_defaults(func=cmd_db)
 
-    set_parser = db_subparsers.add_parser("set", help="Set a value in the thread state")
-    set_parser.add_argument("--project-id", required=True, help="Project ID")
-    set_parser.add_argument("--thread-id", required=True, help="Thread ID")
-    set_parser.add_argument("--key", required=True, help="Key to set")
-    set_parser.add_argument("--value", required=True, help="Value to set (JSON strings supported)")
+    set_parser = db_subparsers.add_parser("set",
+        help="Write or update a key-value pair in a thread's state")
+    set_parser.add_argument("--project-id", required=True,
+        help="ID of the project containing the thread")
+    set_parser.add_argument("--thread-id", required=True,
+        help="ID of the thread to update")
+    set_parser.add_argument("--key", required=True,
+        help="Key name to set (e.g. \"user_preferences\", \"status\")")
+    set_parser.add_argument("--value", required=True,
+        help="Value to store — supports JSON (e.g. '\"done\"', '{\"a\":1}')")
     set_parser.set_defaults(func=cmd_db_set)
 
+    # --- Smart Commands (cli_smart.py) ---
+
+    # Helper to add common smart-command args
+    def _add_smart_args(p):
+        p.add_argument("--project-id",
+            help="Project ID (default: read from epsimo.yaml in current directory)")
+        p.add_argument("--assistant-id",
+            help="Assistant ID (default: auto-detected from project)")
+        p.add_argument("--base-url",
+            help="Backend API URL override (e.g. http://localhost:8000)")
+
+    # epsimo chat
+    chat_parser = subparsers.add_parser("chat",
+        help="Interactive chat with real-time tool call visibility",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo chat                                    Auto-detect project/assistant
+  epsimo chat --tools search_tavily,ddg_search   Enable specific tools
+  epsimo chat --base-url http://localhost:8000    Use local backend
+
+Like 'run' but shows when the assistant calls tools in real time.""")
+    _add_smart_args(chat_parser)
+    chat_parser.add_argument("--tools",
+        help="Comma-separated tool types to enable (e.g. search_tavily,dall_e)")
+    chat_parser.set_defaults(func=cmd_chat)
+
+    # epsimo exec
+    exec_parser = subparsers.add_parser("exec",
+        help="Send code to a backend assistant for execution",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo exec "print('Hello world')"
+  epsimo exec --file script.py
+  epsimo exec "2 + 2" --base-url http://localhost:8000""")
+    exec_parser.add_argument("code", nargs="?", default=None,
+        help="Python code string to execute (e.g. \"print('hello')\")")
+    exec_parser.add_argument("--file",
+        help="Path to a code file to execute instead of inline code")
+    _add_smart_args(exec_parser)
+    exec_parser.set_defaults(func=cmd_exec)
+
+    # epsimo search
+    search_parser = subparsers.add_parser("search",
+        help="Perform a web search through a backend assistant",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo search "latest AI news"
+  epsimo search "Python async patterns" --tool search_tavily
+  epsimo search "Docker best practices" --tool ddg_search""")
+    search_parser.add_argument("query", help="Search query text (e.g. \"LangChain agents\")")
+    search_parser.add_argument("--tool", default="search_tavily",
+        help="Search provider: search_tavily (default) or ddg_search")
+    _add_smart_args(search_parser)
+    search_parser.set_defaults(func=cmd_search)
+
+    # epsimo tools [list | health <type>]
+    tools_parser = subparsers.add_parser("tools",
+        help="List available tools or check their health status",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo tools                           List all available tools
+  epsimo tools --json                    Output tool list as JSON
+  epsimo tools health ddg_search         Check if DuckDuckGo search is working
+  epsimo tools health search_tavily      Check Tavily search health""")
+    tools_parser.add_argument("--base-url",
+        help="Backend API URL override (e.g. http://localhost:8000)")
+    tools_parser.add_argument("--json", action="store_true",
+        help="Output tool list as JSON instead of a table")
+    tools_subparsers = tools_parser.add_subparsers(dest="tools_command")
+    tools_parser.set_defaults(func=cmd_tools)
+
+    tools_health_parser = tools_subparsers.add_parser("health",
+        help="Run a health check on a specific tool to verify it is working")
+    tools_health_parser.add_argument("tool_type",
+        help="Tool type to check (e.g. ddg_search, search_tavily, dall_e)")
+    tools_health_parser.add_argument("--json", action="store_true",
+        help="Output health check result as JSON")
+    tools_health_parser.add_argument("--base-url",
+        help="Backend API URL override (e.g. http://localhost:8000)")
+    tools_health_parser.set_defaults(func=cmd_tools_health)
+
+    # epsimo tui
+    tui_parser = subparsers.add_parser("tui",
+        help="Launch an interactive terminal dashboard with live data",
+        formatter_class=F,
+        epilog="""examples:
+  epsimo tui
+
+Navigate with arrow keys or number keys [1-6] to switch tabs.
+Tabs: Status, Projects, Assistants, Threads, DB, Tools.
+Press [P] to switch project, [R] to refresh, [Enter] to drill in, [Q] to quit.""")
+    tui_parser.set_defaults(func=cmd_tui)
+
     args = parser.parse_args()
-    
+
     if hasattr(args, "func"):
         args.func(args)
     else:

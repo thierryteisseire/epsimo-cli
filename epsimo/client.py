@@ -11,7 +11,7 @@ from .resources.db import Database
 class EpsimoClient:
     def __init__(self, api_key=None, base_url=None):
         self.api_key = api_key or os.environ.get("EPSIMO_API_KEY") or get_token()
-        self.base_url = base_url or os.environ.get("EPSIMO_API_URL", "https://api.epsimoagents.com")
+        self.base_url = base_url or os.environ.get("EPSIMO_API_URL", "http://localhost:8000")
         
         # In the future, we might support API Keys directly.
         # For now, we reuse the JWT token logic but wrapped cleanly.

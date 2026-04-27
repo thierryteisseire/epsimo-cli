@@ -1,8 +1,8 @@
 # Epsimo API Reference
 
-Complete reference for the Epsimo Agent Platform API v1.0
+Complete reference for the Epsimo Agent Platform REST API.
 
-**Base URL:** `https://api.epsimoagents.com`
+**Base URL:** `https://backend.epsimoagents.com`
 
 ---
 
@@ -15,16 +15,23 @@ Complete reference for the Epsimo Agent Platform API v1.0
 5. [Projects](#projects)
 6. [Assistants](#assistants)
 7. [Threads](#threads)
-8. [Messages](#messages)
+8. [Runs (Streaming)](#runs-streaming)
 9. [Files](#files)
 10. [Credits & Billing](#credits--billing)
 11. [Virtual Database](#virtual-database)
+12. [Tools](#tools)
 
 ---
 
 ## Authentication
 
-All API requests require authentication using JWT tokens.
+All API requests require a JWT Bearer token in the `Authorization` header:
+
+```
+Authorization: Bearer <access_token>
+```
+
+Tokens expire after **1 hour**. Re-authenticate to get a new token.
 
 ### POST /auth/signup
 
@@ -53,7 +60,7 @@ Register a new user account.
 
 ### POST /auth/login
 
-Authenticate and receive access token.
+Authenticate and receive an access token.
 
 **Request:**
 ```json
@@ -73,22 +80,9 @@ Authenticate and receive access token.
 }
 ```
 
-**Error Response (401):**
-```json
-{
-  "error": "Invalid credentials",
-  "detail": "Email or password is incorrect"
-}
-```
-
 ### GET /auth/thread-info
 
-Get current user information and thread usage.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
+Get current user info and thread usage. Also used as the balance endpoint.
 
 **Response (200):**
 ```json
@@ -101,111 +95,69 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### Token Refresh
+### GET /auth/user-info
 
-Tokens expire after 1 hour. To refresh:
+Get user profile information.
 
-```python
-# Python example
-import requests
-
-def refresh_token(expired_token):
-    # Re-authenticate with stored credentials
-    response = requests.post(
-        "https://api.epsimoagents.com/auth/login",
-        json={"email": stored_email, "password": stored_password}
-    )
-    return response.json()["access_token"]
+**Response (200):**
+```json
+{
+  "email": "user@example.com",
+  "user_id": "usr_123"
+}
 ```
 
 ---
 
 ## HTTP Status Codes
 
-| Code | Meaning | Common Causes | Recommended Action |
-|------|---------|---------------|-------------------|
-| 200 | Success | Request completed successfully | Continue processing |
-| 201 | Created | Resource created successfully | Capture returned ID |
-| 204 | No Content | Deletion succeeded | Confirm success |
-| 400 | Bad Request | Invalid payload, missing fields | Validate request schema |
-| 401 | Unauthorized | Invalid/expired token | Refresh or re-authenticate |
-| 403 | Forbidden | Insufficient permissions | Check user/project access |
-| 404 | Not Found | Resource doesn't exist | Verify ID is correct |
-| 409 | Conflict | Duplicate resource | Check for existing records |
-| 422 | Validation Error | Schema validation failed | Review error details |
-| 429 | Too Many Requests | Rate limit exceeded | Implement exponential backoff |
-| 500 | Server Error | Backend issue | Retry with exponential backoff |
-| 503 | Service Unavailable | Temporary downtime | Wait and retry |
+| Code | Meaning | Action |
+|------|---------|--------|
+| 200 | Success | Continue processing |
+| 201 | Created | Capture returned ID |
+| 204 | No Content | Deletion succeeded |
+| 400 | Bad Request | Validate request payload |
+| 401 | Unauthorized | Refresh token or re-authenticate |
+| 403 | Forbidden | Check user/project permissions |
+| 404 | Not Found | Verify resource ID |
+| 409 | Conflict | Check for duplicate resources |
+| 422 | Validation Error | Review error details |
+| 429 | Too Many Requests | Implement exponential backoff |
+| 500 | Server Error | Retry with backoff |
+| 503 | Service Unavailable | Wait and retry |
 
 ---
 
 ## Error Handling
 
-### Standard Error Response Format
+### Standard Error Format
 
 ```json
 {
   "error": "Error type",
-  "detail": "Detailed error message",
-  "field": "problematic_field_name",
-  "code": "ERROR_CODE"
+  "detail": "Detailed error message"
 }
 ```
 
-### Example Error Responses
-
-**Validation Error (422):**
-```json
-{
-  "error": "Validation Error",
-  "detail": "Field 'name' is required",
-  "field": "name"
-}
-```
-
-**Authentication Error (401):**
-```json
-{
-  "error": "Unauthorized",
-  "detail": "Token has expired or is invalid",
-  "code": "TOKEN_EXPIRED"
-}
-```
-
-### Retry Logic with Exponential Backoff
+### Retry with Exponential Backoff
 
 ```python
 import time
 import requests
-from requests.exceptions import HTTPError
 
-def make_request_with_retry(url, headers, method="GET", json_data=None, max_retries=5):
-    """Make API request with automatic retry on rate limits and server errors."""
+def request_with_retry(method, url, headers, json_data=None, max_retries=5):
     for attempt in range(max_retries):
-        try:
-            response = requests.request(method, url, headers=headers, json=json_data)
-            response.raise_for_status()
-            return response.json() if response.content else None
-
-        except HTTPError as e:
-            if e.response.status_code == 429:
-                # Rate limited - exponential backoff
-                wait_time = min(60 * (2 ** attempt), 300)  # Max 5 minutes
-                print(f"Rate limited. Waiting {wait_time}s...")
-                time.sleep(wait_time)
-            elif e.response.status_code >= 500:
-                # Server error - retry with backoff
-                wait_time = min(10 * (2 ** attempt), 60)  # Max 1 minute
-                print(f"Server error. Waiting {wait_time}s...")
-                time.sleep(wait_time)
-            elif e.response.status_code == 401:
-                # Token expired - try to refresh
-                print("Token expired. Attempting refresh...")
-                raise
-            else:
-                # Other errors - don't retry
-                raise
-
+        resp = requests.request(method, url, headers=headers, json=json_data)
+        if resp.ok:
+            return resp.json() if resp.content else None
+        if resp.status_code == 429:
+            time.sleep(min(60 * (2 ** attempt), 300))
+        elif resp.status_code >= 500:
+            time.sleep(min(10 * (2 ** attempt), 60))
+        elif resp.status_code == 401:
+            raise Exception("Token expired — re-authenticate")
+        else:
+            resp.raise_for_status()
     raise Exception(f"Max retries ({max_retries}) exceeded")
 ```
 
@@ -219,29 +171,22 @@ def make_request_with_retry(url, headers, method="GET", json_data=None, max_retr
 | Standard | 300 requests/minute |
 | Premium | 1,000 requests/minute |
 
-**Rate Limit Headers:**
+Rate limit headers:
 ```
 X-RateLimit-Limit: 300
 X-RateLimit-Remaining: 245
 X-RateLimit-Reset: 1672531200
 ```
 
-When rate limited (429), wait and retry with exponential backoff (see [Error Handling](#error-handling)).
-
 ---
 
 ## Projects
 
-Projects are top-level containers for assistants, threads, and files.
+Projects are top-level containers for assistants, threads, and files. Use your **user-level token** for project operations.
 
 ### GET /projects/
 
-List all projects for the authenticated user.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
+List all projects.
 
 **Response (200):**
 ```json
@@ -250,8 +195,8 @@ Authorization: Bearer <access_token>
     "project_id": "proj_abc123",
     "name": "My AI Project",
     "description": "Customer support automation",
-    "created_at": "2024-01-15T10:30:00Z",
-    "access_token": "proj_token_..."
+    "access_token": "proj_token_...",
+    "created_at": "2024-01-15T10:30:00Z"
   }
 ]
 ```
@@ -265,9 +210,7 @@ Create a new project.
 {
   "name": "My New Project",
   "description": "Optional description",
-  "metadata": {
-    "custom_field": "value"
-  }
+  "metadata": {}
 }
 ```
 
@@ -276,7 +219,6 @@ Create a new project.
 {
   "project_id": "proj_xyz789",
   "name": "My New Project",
-  "description": "Optional description",
   "access_token": "proj_token_...",
   "created_at": "2024-01-15T11:00:00Z"
 }
@@ -284,38 +226,43 @@ Create a new project.
 
 ### GET /projects/{project_id}
 
-Get project details including project-specific access token.
+Get project details. The response includes a **project-specific access token** — use this token for all assistant, thread, and file operations within the project.
 
 **Response (200):**
 ```json
 {
   "project_id": "proj_abc123",
   "name": "My AI Project",
-  "description": "Customer support automation",
   "access_token": "proj_token_...",
   "token": "proj_token_...",
-  "jwt_token": "proj_token_...",
-  "created_at": "2024-01-15T10:30:00Z"
+  "jwt_token": "proj_token_..."
 }
 ```
 
-**Note:** Use the `access_token` from this response for project-scoped operations (assistants, threads, files).
+### PUT /projects/{project_id}
+
+Update a project.
+
+**Request:**
+```json
+{
+  "name": "Updated Name",
+  "description": "Updated description",
+  "metadata": {}
+}
+```
 
 ### DELETE /projects/{project_id}?confirm=true
 
-Delete a project and all associated resources.
+Delete a project and all associated resources. Requires `confirm=true` query parameter.
 
-**Query Parameters:**
-- `confirm=true` (required) - Confirmation flag
-
-**Response (204):**
-No content (successful deletion)
+**Response (204):** No content
 
 ---
 
 ## Assistants
 
-Assistants are AI agents with specific instructions and capabilities.
+Assistants are AI agents with instructions and tool configurations. All assistant endpoints require a **project-scoped token** (from `GET /projects/{project_id}`).
 
 ### GET /assistants/
 
@@ -333,11 +280,11 @@ Authorization: Bearer <project_access_token>
     "assistant_id": "asst_abc123",
     "name": "Support Agent",
     "config": {
-      "instructions": "You are a helpful support agent",
-      "model": "gpt-4o",
       "configurable": {
         "type": "agent",
-        "agent_type": "agent"
+        "type==agent/agent_type": "agent",
+        "type==agent/system_message": "You are a helpful agent.",
+        "type==agent/tools": [...]
       }
     },
     "public": false,
@@ -355,32 +302,23 @@ Create a new assistant.
 {
   "name": "Research Assistant",
   "config": {
-    "instructions": "You help with research tasks",
-    "model": "gpt-4o",
     "configurable": {
       "type": "agent",
-      "agent_type": "agent"
-    },
-    "tools": [
-      {
-        "type": "search_tavily",
-        "max_results": 5
-      },
-      {
-        "type": "function",
-        "name": "update_database",
-        "description": "Save structured data",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "key": {"type": "string"},
-            "value": {"type": "object"}
-          },
-          "required": ["key", "value"]
+      "type==agent/agent_type": "agent",
+      "type==agent/system_message": "You help with research tasks.",
+      "type==agent/tools": [
+        {
+          "id": "search_tavily-abc123",
+          "name": "Search (Tavily)",
+          "type": "search_tavily",
+          "description": "Uses the Tavily search engine.",
+          "config": {}
         }
-      }
-    ]
+      ]
+    }
   },
+  "metadata": {},
+  "tags": [],
   "public": false
 }
 ```
@@ -390,9 +328,7 @@ Create a new assistant.
 {
   "assistant_id": "asst_xyz789",
   "name": "Research Assistant",
-  "config": { ... },
-  "public": false,
-  "created_at": "2024-01-15T11:15:00Z"
+  "config": { ... }
 }
 ```
 
@@ -400,53 +336,38 @@ Create a new assistant.
 
 Get assistant details.
 
-**Response (200):**
-```json
-{
-  "assistant_id": "asst_abc123",
-  "name": "Support Agent",
-  "config": { ... },
-  "public": false,
-  "created_at": "2024-01-15T10:45:00Z"
-}
-```
+### PUT /assistants/{assistant_id}
+
+Update an assistant's configuration.
 
 ### DELETE /assistants/{assistant_id}
 
-Delete an assistant.
-
-**Response (204):**
-No content (successful deletion)
+Delete an assistant. **Response (204):** No content
 
 ---
 
 ## Threads
 
-Threads represent persistent conversation contexts with Virtual Database state.
+Threads represent persistent conversation contexts. All thread endpoints require a **project-scoped token**.
 
 ### GET /threads/
 
 List all threads in a project.
 
-**Headers:**
-```
-Authorization: Bearer <project_access_token>
-```
-
 **Response (200):**
 ```json
-[
-  {
-    "thread_id": "thread_abc123",
-    "name": "Customer #1234",
-    "assistant_id": "asst_xyz789",
-    "metadata": {
-      "configurable": {},
-      "type": "thread"
-    },
-    "created_at": "2024-01-15T12:00:00Z"
-  }
-]
+{
+  "threads": [
+    {
+      "thread_id": "thread_abc123",
+      "name": "Customer #1234",
+      "assistant_id": "asst_xyz789",
+      "metadata": { "type": "thread" },
+      "created_at": "2024-01-15T12:00:00Z"
+    }
+  ],
+  "total": 1
+}
 ```
 
 ### POST /threads/
@@ -458,13 +379,7 @@ Create a new thread.
 {
   "name": "Customer Support Session",
   "assistant_id": "asst_xyz789",
-  "metadata": {
-    "configurable": {},
-    "type": "thread"
-  },
-  "configurable": {
-    "type": "agent"
-  }
+  "metadata": { "type": "thread" }
 }
 ```
 
@@ -473,129 +388,108 @@ Create a new thread.
 {
   "thread_id": "thread_new123",
   "name": "Customer Support Session",
-  "assistant_id": "asst_xyz789",
-  "created_at": "2024-01-15T12:30:00Z"
+  "assistant_id": "asst_xyz789"
 }
 ```
 
 ### GET /threads/{thread_id}
 
-Get thread details and messages.
+Get thread details.
+
+### GET /threads/{thread_id}/state
+
+Get the thread's structured state (Virtual Database).
 
 **Response (200):**
 ```json
 {
-  "thread_id": "thread_abc123",
-  "name": "Customer #1234",
-  "assistant_id": "asst_xyz789",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Hello!",
-      "timestamp": "2024-01-15T12:01:00Z"
-    },
-    {
-      "role": "assistant",
-      "content": "How can I help you?",
-      "timestamp": "2024-01-15T12:01:05Z"
-    }
-  ]
+  "values": {
+    "user_preferences": { "theme": "dark" },
+    "status": "active"
+  }
 }
 ```
 
-### POST /threads/{thread_id}/run
+### POST /threads/{thread_id}/state
 
-Send a message and stream the assistant's response.
+Update the thread's structured state.
 
 **Request:**
 ```json
 {
-  "message": "What's the status of my order?",
-  "stream": true
+  "values": {
+    "status": "completed"
+  },
+  "config": {}
 }
 ```
 
-**Response (Streaming):**
-```
-data: {"type": "start", "run_id": "run_123"}
+### GET /threads/{thread_id}/history
 
-data: {"type": "content", "delta": "Your"}
+Get thread message history.
 
-data: {"type": "content", "delta": " order"}
+### PUT /threads/{thread_id}
 
-data: {"type": "tool_call", "name": "database_query", "args": {...}}
-
-data: {"type": "done"}
-```
+Update thread metadata.
 
 ### DELETE /threads/{thread_id}
 
-Delete a thread.
-
-**Response (204):**
-No content (successful deletion)
+Delete a thread. **Response (204):** No content
 
 ---
 
-## Messages
+## Runs (Streaming)
 
-### GET /threads/{thread_id}/messages
+### POST /runs/stream
 
-Get all messages in a thread.
+Send a message and stream the assistant's response via Server-Sent Events (SSE).
 
-**Query Parameters:**
-- `limit` (optional): Max messages to return (default: 50)
-- `before` (optional): Cursor for pagination
-
-**Response (200):**
-```json
-{
-  "messages": [
-    {
-      "message_id": "msg_123",
-      "role": "user",
-      "content": "Hello",
-      "timestamp": "2024-01-15T12:00:00Z"
-    }
-  ],
-  "has_more": false
-}
+**Headers:**
 ```
-
-### POST /threads/{thread_id}/messages
-
-Add a message to a thread (without triggering assistant).
+Authorization: Bearer <project_access_token>
+Accept: text/event-stream
+```
 
 **Request:**
 ```json
 {
-  "role": "user",
-  "content": "This is a manual message"
+  "thread_id": "thread_123",
+  "assistant_id": "asst_xyz",
+  "input": [
+    { "role": "user", "content": "What's the weather?", "type": "human" }
+  ],
+  "stream_mode": ["messages", "events", "values"]
 }
 ```
 
-**Response (201):**
-```json
-{
-  "message_id": "msg_new456",
-  "role": "user",
-  "content": "This is a manual message",
-  "timestamp": "2024-01-15T12:45:00Z"
-}
+**Response (SSE stream):**
 ```
+event: messages
+data: [{"type": "ai", "content": "Let me check", "tool_calls": [...]}]
+
+event: messages
+data: [{"type": "tool", "content": "Weather is sunny", "tool_call_id": "tc_123"}]
+
+event: messages
+data: [{"type": "ai", "content": "The weather is sunny today!"}]
+
+data: [DONE]
+```
+
+**Stream event types:**
+- `messages` — AI responses and tool call results
+- `events` — Internal agent events
+- `values` — Updated thread state values
 
 ---
 
 ## Files
 
-### GET /files/
+File operations are scoped to assistants. Requires a **project-scoped token**.
 
-List all files in a project.
+### GET /assistants/{assistant_id}/files
 
-**Headers:**
-```
-Authorization: Bearer <project_access_token>
-```
+List files attached to an assistant.
 
 **Response (200):**
 ```json
@@ -604,20 +498,19 @@ Authorization: Bearer <project_access_token>
     "file_id": "file_abc123",
     "filename": "document.pdf",
     "size": 1024567,
-    "mime_type": "application/pdf",
     "uploaded_at": "2024-01-15T13:00:00Z"
   }
 ]
 ```
 
-### POST /files/
+### POST /assistants/{assistant_id}/files
 
-Upload a file.
+Upload a file (multipart/form-data).
 
-**Request (multipart/form-data):**
+**Request:**
 ```
-file: <binary file data>
-purpose: "assistants" | "retrieval"
+Content-Type: multipart/form-data
+files: <binary file data>
 ```
 
 **Response (201):**
@@ -625,51 +518,39 @@ purpose: "assistants" | "retrieval"
 {
   "file_id": "file_new789",
   "filename": "document.pdf",
-  "size": 1024567,
-  "purpose": "retrieval",
-  "uploaded_at": "2024-01-15T13:15:00Z"
+  "size": 1024567
 }
 ```
 
-### DELETE /files/{file_id}
+### DELETE /assistants/{assistant_id}/files/{file_id}
 
-Delete a file.
-
-**Response (204):**
-No content (successful deletion)
+Delete a file. **Response (204):** No content
 
 ---
 
 ## Credits & Billing
 
-### GET /credits/balance
+### GET /auth/thread-info
 
-Get current thread usage and limits.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
+Get current thread balance (same endpoint as user info).
 
 **Response (200):**
 ```json
 {
   "thread_counter": 45,
   "thread_max": 100,
-  "threads_remaining": 55,
-  "subscription_tier": "standard"
+  "email": "user@example.com"
 }
 ```
 
-### POST /credits/checkout
+### POST /checkout/create-checkout-session
 
 Create a Stripe checkout session for purchasing threads.
 
 **Request:**
 ```json
 {
-  "quantity": 1000,
-  "amount": 80.00
+  "quantity": 1000
 }
 ```
 
@@ -682,121 +563,102 @@ Create a Stripe checkout session for purchasing threads.
 ```
 
 **Pricing:**
-- < 500 threads: €0.10/thread
-- 500-999 threads: €0.09/thread
-- 1000+ threads: €0.08/thread
+| Quantity | Price per Thread |
+|----------|-----------------|
+| < 500 | €0.10 |
+| 500–999 | €0.09 |
+| 1000+ | €0.08 |
 
 ---
 
 ## Virtual Database
 
-Threads can serve as structured, persistent storage.
+The Virtual Database uses thread state as structured storage. These are convenience wrappers around the thread state endpoints.
 
-### GET /db/{project_id}/{thread_id}
+### GET /threads/{thread_id}/state → `values`
 
-Get all structured data from a thread.
+Get all structured data. Extract the `values` field from the response.
 
-**Headers:**
-```
-Authorization: Bearer <project_access_token>
-```
-
-**Response (200):**
-```json
-{
-  "user_preferences": {
-    "theme": "dark",
-    "language": "en"
-  },
-  "status": "active",
-  "last_action": "checkout"
-}
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  https://backend.epsimoagents.com/threads/thread_123/state
 ```
 
-### GET /db/{project_id}/{thread_id}/{key}
+### POST /threads/{thread_id}/state
 
-Get specific key from thread state.
+Set key-value pairs in thread state.
 
-**Response (200):**
-```json
-{
-  "theme": "dark",
-  "language": "en"
-}
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"values": {"status": "active"}, "config": {}}' \
+  https://backend.epsimoagents.com/threads/thread_123/state
 ```
 
-### PUT /db/{project_id}/{thread_id}/{key}
+See [docs/virtual_db_guide.md](../docs/virtual_db_guide.md) for patterns and examples.
 
-Set a key-value pair in thread state.
+---
 
-**Request:**
-```json
-{
-  "value": {
-    "theme": "light",
-    "language": "es"
-  }
-}
-```
+## Tools
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "key": "user_preferences",
-  "value": {
-    "theme": "light",
-    "language": "es"
-  }
-}
-```
+### GET /tools/
+
+List available tool types.
+
+### GET /tools/{tool_type}
+
+Get details for a specific tool type.
+
+### GET /tools/{tool_type}/health
+
+Health-check a tool to verify it's working.
 
 ---
 
 ## Best Practices
 
-### 1. Token Management
-- Cache tokens and refresh on 401 errors
-- Store tokens securely (never in version control)
-- Use project-specific tokens for multi-tenant apps
-
-### 2. Error Handling
-- Always implement retry logic for 429 and 500+ errors
-- Use exponential backoff with jitter
-- Log errors for debugging
-
-### 3. Rate Limiting
-- Implement client-side throttling
-- Respect `X-RateLimit-*` headers
-- Consider upgrading tier for higher limits
-
-### 4. Security
-- Use HTTPS for all requests
-- Validate SSL certificates in production
-- Never expose API keys in frontend code
-- Use environment variables for credentials
-
-### 5. Performance
-- Use streaming for long-running conversations
-- Implement pagination for large result sets
-- Cache frequently accessed data
-- Batch operations when possible
+1. **Use project-scoped tokens** — Get a project token via `GET /projects/{id}` and use it for all assistant/thread/file operations within that project.
+2. **Implement retry logic** — Always handle 429 and 5xx errors with exponential backoff.
+3. **Use streaming** — For conversations, use `/runs/stream` with SSE for real-time responses.
+4. **Cache tokens** — Store tokens in `~/.epsimo_token` and refresh on 401 errors.
+5. **Never expose tokens in frontend code** — Use a backend proxy for browser-based apps.
 
 ---
 
-## Code Examples
+## SDK Mapping
 
-See [README.md](../README.md) for comprehensive Python SDK examples.
+| SDK Method | HTTP | Endpoint |
+|------------|------|----------|
+| `client.projects.list()` | GET | `/projects/` |
+| `client.projects.create(name, desc)` | POST | `/projects/` |
+| `client.projects.get(id)` | GET | `/projects/{id}` |
+| `client.projects.delete(id)` | DELETE | `/projects/{id}?confirm=true` |
+| `client.assistants.list(pid)` | GET | `/assistants/` |
+| `client.assistants.create(pid, ...)` | POST | `/assistants/` |
+| `client.assistants.get(pid, aid)` | GET | `/assistants/{aid}` |
+| `client.assistants.delete(pid, aid)` | DELETE | `/assistants/{aid}` |
+| `client.threads.list(pid)` | GET | `/threads/` |
+| `client.threads.create(pid, ...)` | POST | `/threads/` |
+| `client.threads.get(pid, tid)` | GET | `/threads/{tid}` |
+| `client.threads.get_state(pid, tid)` | GET | `/threads/{tid}/state` |
+| `client.threads.set_state(pid, tid, vals)` | POST | `/threads/{tid}/state` |
+| `client.threads.delete(pid, tid)` | DELETE | `/threads/{tid}` |
+| `client.threads.run_stream(...)` | POST | `/runs/stream` |
+| `client.files.list(pid, aid)` | GET | `/assistants/{aid}/files` |
+| `client.files.upload(pid, aid, path)` | POST | `/assistants/{aid}/files` |
+| `client.files.delete(pid, aid, fid)` | DELETE | `/assistants/{aid}/files/{fid}` |
+| `client.credits.get_balance()` | GET | `/auth/thread-info` |
+| `client.credits.create_checkout_session(qty)` | POST | `/checkout/create-checkout-session` |
 
 ---
 
 ## Support
 
-- **GitHub Issues:** https://github.com/thierryteisseire/epsimo-agent/issues
-- **Documentation:** [SKILL.md](../SKILL.md)
+- **GitHub Issues:** [github.com/thierryteisseire/epsimo-cli/issues](https://github.com/thierryteisseire/epsimo-cli/issues)
+- **Documentation:** [README.md](../README.md)
 - **Virtual DB Guide:** [docs/virtual_db_guide.md](../docs/virtual_db_guide.md)
 
 ---
 
-**API Version:** 1.0  
-**Last Updated:** 2024-02-11
+**API Version:** 1.0
+**Last Updated:** 2026-04-27

@@ -28,8 +28,8 @@ dependencies = [
 epsimo = "epsimo.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/thierryteisseire/epsimo-agent"
-Repository = "https://github.com/thierryteisseire/epsimo-agent"
+Homepage = "https://github.com/thierryteisseire/epsimo-cli"
+Repository = "https://github.com/thierryteisseire/epsimo-cli"
 
 [tool.setuptools.packages.find]
 include = ["epsimo*"]

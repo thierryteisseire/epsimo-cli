@@ -6,7 +6,7 @@ import json
 import yaml
 from .client import EpsimoClient
 from .auth import login_interactive, get_token
-from .cli_smart import cmd_chat, cmd_exec, cmd_search, cmd_tools, cmd_tools_health
+from .cli_smart import cmd_chat, cmd_exec, cmd_search, cmd_tools, cmd_tools_health, _pick
 from .tui import cmd_tui
 
 def cmd_whoami(args):
@@ -330,7 +330,7 @@ def cmd_db_set(args):
         # Parse value as JSON if possible, otherwise keep as string
         try:
             val = json.loads(args.value)
-        except:
+        except (json.JSONDecodeError, ValueError):
             val = args.value
             
         token = get_token()
@@ -392,17 +392,16 @@ def cmd_create(args):
                 with open(dest_path, "w") as dest_f:
                     dest_f.write(content)
 
-        # 2. Copy the UI components from the current codebase to the new project
-        # In a real framework, this would be an npm install @epsimo/ui
-        # For this MVP, we copy the files.
+        # 2. Copy UI components from the bundled templates (if available)
         print("📦 Injecting Epsimo UI Kit...")
-        # Since we are in the context of the current repo:
-        src_ui_dir = "/Users/thierry/code/epsimo-frontend/src/components/epsimo"
+        src_ui_dir = os.path.join(base_dir, "templates", "components", "epsimo")
         dest_ui_dir = os.path.join(target_dir, "components", "epsimo")
         
         import shutil
         if os.path.exists(src_ui_dir):
             shutil.copytree(src_ui_dir, dest_ui_dir, dirs_exist_ok=True)
+        else:
+            print("  ℹ️  UI Kit not bundled. Install manually: npm install @epsimo/ui")
         
         print(f"\n✅ Project {project_name} created successfully at ./{project_slug}")
         print("\nNext steps:")
@@ -415,26 +414,6 @@ def cmd_create(args):
     except Exception as e:
         print(f"❌ Failed to create project: {e}")
 
-def _pick_item(items, label, name_key="name"):
-    """Prompt user to pick from a list. Auto-selects if only one."""
-    if not items:
-        return None
-    if len(items) == 1:
-        print(f"📌 Using {label}: {items[0].get(name_key, '?')}")
-        return items[0]
-    print(f"\n  Select a {label}:")
-    for i, item in enumerate(items, 1):
-        print(f"  {i}) {item.get(name_key, '?')}")
-    while True:
-        try:
-            choice = input(f"  Enter number [1-{len(items)}]: ").strip()
-            idx = int(choice) - 1
-            if 0 <= idx < len(items):
-                return items[idx]
-        except (ValueError, EOFError, KeyboardInterrupt):
-            print()
-            return None
-        print(f"  Invalid choice. Enter 1-{len(items)}.")
 
 
 def cmd_run(args):
@@ -454,7 +433,7 @@ def cmd_run(args):
         if not projects:
             print("❌ No projects found. Run 'epsimo init' to create one.")
             return
-        picked = _pick_item(projects, "project")
+        picked = _pick(projects, "project")
         if not picked:
             return
         project_id = picked["project_id"]
@@ -466,7 +445,7 @@ def cmd_run(args):
         if not assistants:
             print("❌ No assistants found in this project.")
             return
-        picked = _pick_item(assistants, "assistant")
+        picked = _pick(assistants, "assistant")
         if not picked:
             return
         assistant_id = picked["assistant_id"]
@@ -558,14 +537,6 @@ def cmd_run(args):
                         sys.stdout.write(new_text)
                         sys.stdout.flush()
                         last_printed_len = len(content)
-
-                content = item.get("content")
-                if content and isinstance(content, str):
-                    new_text = content[last_printed_len:]
-                    if new_text:
-                        sys.stdout.write(new_text)
-                        sys.stdout.flush()
-                        last_printed_len = len(content)
             print("\n")
             
         except KeyboardInterrupt:
@@ -586,8 +557,9 @@ def main():
   cd my-ai-app && epsimo init  Link directory to platform
   epsimo deploy                Push config to Epsimo cloud
 
-docs: https://github.com/thierryteisseire/epsimo-agent"""
+docs: https://github.com/thierryteisseire/epsimo-cli"""
     )
+    parser.add_argument("--version", action="version", version="epsimo 0.3.3")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # epsimo init

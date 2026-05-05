@@ -642,10 +642,12 @@ class TUI:
         values = state.get("values", state) if isinstance(state, dict) else {}
         if not values:
             print(f"  {DIM}(empty — no data stored){RESET}")
-        else:
+        elif isinstance(values, dict):
             for k, v in values.items():
                 val = json.dumps(v, indent=2) if isinstance(v, (dict, list)) else str(v)
                 print(f"  {YELLOW}{k}{RESET}: {val}")
+        else:
+            print(f"  {json.dumps(values, indent=2)}")
         self._pause()
 
     def show_db(self):

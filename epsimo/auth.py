@@ -2,6 +2,7 @@
 import os
 import json
 import time
+import base64
 import requests
 import getpass
 import sys
@@ -9,8 +10,25 @@ import subprocess
 from pathlib import Path
 
 # Configuration
-API_BASE_URL = os.environ.get("EPSIMO_API_URL", "http://localhost:8000")
+API_BASE_URL = os.environ.get("EPSIMO_API_URL", "https://backend.epsimoagents.com")
 TOKEN_FILE = Path.home() / ".epsimo_token"
+
+
+def _is_token_expired(token):
+    """Check if a JWT token is expired."""
+    try:
+        payload = token.split(".")[1]
+        # Fix base64 padding
+        payload += "=" * (-len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload))
+        exp = data.get("exp")
+        if exp is None:
+            return False
+        # Treat as expired if less than 60s remaining
+        return time.time() > (exp - 60)
+    except Exception:
+        return True
+
 
 def get_token():
     """Retrieve a valid JWT token, refreshing if necessary."""
@@ -20,7 +38,9 @@ def get_token():
         try:
             with open(TOKEN_FILE, 'r') as f:
                 data = json.load(f)
-                return data.get('access_token') or data.get('token') or data.get('jwt_token')
+                token = data.get('access_token') or data.get('token') or data.get('jwt_token')
+                if token and not _is_token_expired(token):
+                    return token
         except json.JSONDecodeError:
             pass
             
@@ -43,10 +63,17 @@ def perform_signup(email, password):
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        print("✅ Signup successful! Logging in...")
+        data = response.json()
+
+        if "verification" in data.get("message", "").lower():
+            print("✅ Account created! A verification email has been sent.")
+            print(f"📧 Check your inbox at {email} and verify your account.")
+            input("Press Enter after verifying your email...")
+
+        print("🔐 Logging in...")
         return perform_login(email, password)
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 400: # Usually "User already exists" or validation error
+        if e.response.status_code == 400:
              print(f"⚠️ Signup failed: {e.response.text}")
         else:
              print(f"❌ Signup failed: {e}")

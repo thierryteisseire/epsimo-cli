@@ -1,10 +1,9 @@
 {
     "name": "epsimo-cli",
-    "version": "0.3.0",
+    "version": "0.3.3",
     "description": "Epsimo CLI - TUI dashboard, smart CLI, AI agents, projects, threads, Virtual Database, and deployments from the terminal.",
-    "main": "SKILL.md",
     "bin": {
-        "epsimo": "./bin/epsimo.js"
+        "epsimo": "bin/epsimo.js"
     },
     "scripts": {
         "verify": "python3 verify_skill.py",
@@ -13,7 +12,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/thierryteisseire/epsimo-cli.git"
+        "url": "git+https://github.com/thierryteisseire/epsimo-cli.git"
     },
     "keywords": [
         "epsimo",
@@ -30,6 +29,9 @@
     ],
     "author": "Thierry Teisseire",
     "license": "MIT",
+    "engines": {
+        "node": ">=14.0.0"
+    },
     "files": [
         "SKILL.md",
         "README.md",
@@ -41,6 +43,7 @@
         "references/",
         "scripts/",
         "epsimo/",
+        "!epsimo/**/__pycache__",
         "docs/",
         "requirements.txt",
         "skills/",

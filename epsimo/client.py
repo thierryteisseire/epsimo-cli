@@ -11,7 +11,7 @@ from .resources.db import Database
 class EpsimoClient:
     def __init__(self, api_key=None, base_url=None):
         self.api_key = api_key or os.environ.get("EPSIMO_API_KEY") or get_token()
-        self.base_url = base_url or os.environ.get("EPSIMO_API_URL", "http://localhost:8000")
+        self.base_url = base_url or os.environ.get("EPSIMO_API_URL", "https://backend.epsimoagents.com")
         
         # In the future, we might support API Keys directly.
         # For now, we reuse the JWT token logic but wrapped cleanly.
@@ -34,7 +34,7 @@ class EpsimoClient:
             try:
                 import json
                 print(f"❌ API Error ({response.status_code}): {json.dumps(response.json(), indent=2)}")
-            except:
+            except Exception:
                 print(f"❌ API Error ({response.status_code}): {response.text}")
             response.raise_for_status()
         if response.status_code == 204:
